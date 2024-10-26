@@ -6,18 +6,18 @@ import sys
 
 app = Flask(__name__)
 
-# Define colors as ANSI escape sequences for full background colors
 COLORS = [
-    '\033[41m',  # Red background
-    '\033[44m',  # Blue background
-    '\033[42m',  # Green background
-    '\033[43m',  # Yellow background
-    '\033[47m',  # White background
+    '\033[31m',  # Red
+    '\033[34m',  # Blue
+    '\033[32m',  # Green
+    '\033[33m',  # Yellow
+    '\033[31m',  # White
+    '\033[34m',
+    '\033[31m'
 ]
 
 COLOR_RESET = '\033[0m'
 
-# Terminal control sequences
 HIDE_CURSOR = '\033[?25l'
 SHOW_CURSOR = '\033[?25h'
 SAVE_CURSOR = '\033[s'
@@ -30,47 +30,56 @@ def clear_screen():
     return '\033[2J\033[H'
 
 
-def apply_full_color(color):
-    # Create a full screen of color by filling it with spaces
-    # Get terminal size (default to 24x80 if can't determine)
+def load_frames(frames_dir):
+    frames = []
     try:
-        rows, columns = os.popen('stty size', 'r').read().split()
-        rows, columns = int(rows), int(columns)
-    except:
-        rows, columns = 24, 80
-
-    # Create a full screen of colored spaces
-    colored_screen = []
-    for _ in range(rows):
-        colored_screen.append(f"{color}{' ' * columns}{COLOR_RESET}")
-
-    return '\n'.join(colored_screen)
+        for i in range(10):
+            with open(os.path.join(frames_dir, f"{i}.txt"), 'r', encoding='utf-8') as f:
+                frames.append(f.read())
+    except Exception as e:
+        print(f"Error loading frames: {e}")
+        sys.exit(1)
+    return frames
 
 
-def generate_frames():
-    # Initialize terminal
+def apply_color(frame, color):
+    return f"{color}{frame}{COLOR_RESET}"
+
+
+def generate_frames(frames):
     yield ALTERNATIVE_SCREEN + HIDE_CURSOR
+
+    frame_count = 0
+    color_index = 0
 
     try:
         while True:
-            for color in COLORS:
-                # Save cursor, clear screen, show colored screen, restore cursor
-                yield (SAVE_CURSOR +
-                       clear_screen() +
-                       apply_full_color(color) +
-                       RESTORE_CURSOR)
+            current_frame = frames[frame_count % len(frames)]
+            current_color = COLORS[color_index % len(COLORS)]
 
-                # Wait before changing to next color
-                time.sleep(1)  # 1 second per color
+            colored_frame = apply_color(current_frame, current_color)
+
+            yield (SAVE_CURSOR +
+                   clear_screen() +
+                   colored_frame + '\n' +
+                   RESTORE_CURSOR)
+
+            time.sleep(0.1)
+
+            frame_count += 1
+            color_index += 1
+
     except:
-        # Ensure we restore terminal state even if something goes wrong
         yield SHOW_CURSOR + NORMAL_SCREEN
 
 
 @app.route('/')
 def stream_ascii():
+    frames_dir = os.getenv('FRAMES_DIR', './frames')
+    frames = load_frames(frames_dir)
+
     return Response(
-        stream_with_context(generate_frames()),
+        stream_with_context(generate_frames(frames)),
         mimetype='text/plain'
     )
 
@@ -80,6 +89,5 @@ if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=port)
     finally:
-        # Ensure terminal is restored if the app crashes
         sys.stdout.write(SHOW_CURSOR + NORMAL_SCREEN)
         sys.stdout.flush()
