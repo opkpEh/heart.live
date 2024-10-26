@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-from flask import Flask, Response, stream_with_context
+from flask import Flask, Response, request
 import time
 import os
-from colorama import init, Fore, Style
+from colorama import init
 import sys
 
 app = Flask(__name__)
@@ -10,7 +10,7 @@ app = Flask(__name__)
 # Initialize colorama
 init()
 
-# ANSI escape codes for colors (these work better over curl than colorama)
+# ANSI escape codes for colors
 COLORS = [
     '\033[31m',  # red
     '\033[33m',  # yellow
@@ -33,14 +33,13 @@ def apply_diagonal_rainbow(frame, frame_count):
     colored_lines = []
 
     for y, line in enumerate(lines):
-        if not line.strip():  # Skip empty lines
+        if not line.strip():
             colored_lines.append(line)
             continue
 
         colored_chars = []
         for x, char in enumerate(line):
-            if char.strip():  # Only color visible characters
-                # Calculate color index based on diagonal position and frame count
+            if char.strip():
                 color_idx = (x + y + frame_count) % len(COLORS)
                 colored_chars.append(f"{COLORS[color_idx]}{char}{COLOR_RESET}")
             else:
@@ -66,28 +65,30 @@ def load_frames(frames_dir):
     return frames
 
 
-def generate_frames(frames, delay=0.1):
-    frame_count = 0
-    while True:
-        for frame in frames:
-            # Apply rainbow colors diagonally
-            colored_frame = apply_diagonal_rainbow(frame, frame_count)
-            yield clear_screen() + colored_frame + '\n'
-            time.sleep(delay)
-            frame_count += 1
-
-
 @app.route('/')
 def stream_ascii():
     frames_dir = os.getenv('FRAMES_DIR', './frames')
-    delay = float(os.getenv('FRAME_DELAY', '0.1'))
+    frame_num = request.args.get('frame', '0')
+    try:
+        frame_num = int(frame_num)
+    except ValueError:
+        frame_num = 0
 
     frames = load_frames(frames_dir)
 
-    return Response(
-        stream_with_context(generate_frames(frames, delay)),
-        mimetype='text/plain'
-    )
+    # Get a single frame instead of streaming indefinitely
+    frame_index = frame_num % len(frames)
+    frame = frames[frame_index]
+    colored_frame = apply_diagonal_rainbow(frame, frame_num)
+
+    # Return the current frame and the total number of frames
+    response_data = {
+        'frame': colored_frame,
+        'total_frames': len(frames),
+        'current_frame': frame_num
+    }
+
+    return response_data
 
 
 if __name__ == '__main__':

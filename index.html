@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ASCII Animation</title>
+    <style>
+        pre {
+            font-family: monospace;
+            white-space: pre;
+            background: black;
+            color: white;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <pre id="output"></pre>
+
+    <script>
+        let currentFrame = 0;
+        const delay = 100; // 100ms between frames
+
+        async function fetchFrame() {
+            try {
+                const response = await fetch(`/?frame=${currentFrame}`);
+                const data = await response.json();
+
+                document.getElementById('output').innerHTML = data.frame;
+
+                currentFrame = (currentFrame + 1) % data.total_frames;
+
+                setTimeout(fetchFrame, delay);
+            } catch (error) {
+                console.error('Error fetching frame:', error);
+                setTimeout(fetchFrame, delay);
+            }
+        }
+
+        fetchFrame();
+    </script>
+</body>
+</html>
