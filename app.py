@@ -1,96 +1,85 @@
 #!/usr/bin/env python3
-from flask import Flask, Response, request
+from flask import Flask, Response, stream_with_context
 import time
 import os
-from colorama import init
 import sys
 
 app = Flask(__name__)
 
-# Initialize colorama
-init()
-
-# ANSI escape codes for colors
+# Define colors as ANSI escape sequences for full background colors
 COLORS = [
-    '\033[31m',  # red
-    '\033[33m',  # yellow
-    '\033[32m',  # green
-    '\033[36m',  # cyan
-    '\033[34m',  # blue
-    '\033[35m',  # magenta
+    '\033[41m',  # Red background
+    '\033[44m',  # Blue background
+    '\033[42m',  # Green background
+    '\033[43m',  # Yellow background
+    '\033[47m',  # White background
 ]
 
 COLOR_RESET = '\033[0m'
+
+# Terminal control sequences
+HIDE_CURSOR = '\033[?25l'
+SHOW_CURSOR = '\033[?25h'
+SAVE_CURSOR = '\033[s'
+RESTORE_CURSOR = '\033[u'
+ALTERNATIVE_SCREEN = '\033[?1049h'
+NORMAL_SCREEN = '\033[?1049l'
 
 
 def clear_screen():
     return '\033[2J\033[H'
 
 
-def apply_diagonal_rainbow(frame, frame_count):
-    """Apply diagonal rainbow colors to the frame."""
-    lines = frame.split('\n')
-    colored_lines = []
-
-    for y, line in enumerate(lines):
-        if not line.strip():
-            colored_lines.append(line)
-            continue
-
-        colored_chars = []
-        for x, char in enumerate(line):
-            if char.strip():
-                color_idx = (x + y + frame_count) % len(COLORS)
-                colored_chars.append(f"{COLORS[color_idx]}{char}{COLOR_RESET}")
-            else:
-                colored_chars.append(char)
-
-        colored_lines.append(''.join(colored_chars))
-
-    return '\n'.join(colored_lines)
-
-
-def load_frames(frames_dir):
-    frames = []
+def apply_full_color(color):
+    # Create a full screen of color by filling it with spaces
+    # Get terminal size (default to 24x80 if can't determine)
     try:
-        for file_name in sorted(os.listdir(frames_dir)):
-            if file_name.endswith(('.txt', '.ascii')):
-                with open(os.path.join(frames_dir, file_name), 'r', encoding='utf-8') as f:
-                    frames.append(f.read())
-        if not frames:
-            raise Exception(f"No .txt or .ascii files found in {frames_dir}")
-    except Exception as e:
-        print(f"Error loading frames: {e}")
-        sys.exit(1)
-    return frames
+        rows, columns = os.popen('stty size', 'r').read().split()
+        rows, columns = int(rows), int(columns)
+    except:
+        rows, columns = 24, 80
+
+    # Create a full screen of colored spaces
+    colored_screen = []
+    for _ in range(rows):
+        colored_screen.append(f"{color}{' ' * columns}{COLOR_RESET}")
+
+    return '\n'.join(colored_screen)
+
+
+def generate_frames():
+    # Initialize terminal
+    yield ALTERNATIVE_SCREEN + HIDE_CURSOR
+
+    try:
+        while True:
+            for color in COLORS:
+                # Save cursor, clear screen, show colored screen, restore cursor
+                yield (SAVE_CURSOR +
+                       clear_screen() +
+                       apply_full_color(color) +
+                       RESTORE_CURSOR)
+
+                # Wait before changing to next color
+                time.sleep(1)  # 1 second per color
+    except:
+        # Ensure we restore terminal state even if something goes wrong
+        yield SHOW_CURSOR + NORMAL_SCREEN
 
 
 @app.route('/')
 def stream_ascii():
-    frames_dir = os.getenv('FRAMES_DIR', './frames')
-    frame_num = request.args.get('frame', '0')
-    try:
-        frame_num = int(frame_num)
-    except ValueError:
-        frame_num = 0
-
-    frames = load_frames(frames_dir)
-
-    # Get a single frame instead of streaming indefinitely
-    frame_index = frame_num % len(frames)
-    frame = frames[frame_index]
-    colored_frame = apply_diagonal_rainbow(frame, frame_num)
-
-    # Return the current frame and the total number of frames
-    response_data = {
-        'frame': colored_frame,
-        'total_frames': len(frames),
-        'current_frame': frame_num
-    }
-
-    return response_data
+    return Response(
+        stream_with_context(generate_frames()),
+        mimetype='text/plain'
+    )
 
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    try:
+        app.run(host='0.0.0.0', port=port)
+    finally:
+        # Ensure terminal is restored if the app crashes
+        sys.stdout.write(SHOW_CURSOR + NORMAL_SCREEN)
+        sys.stdout.flush()
