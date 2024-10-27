@@ -7,13 +7,7 @@ import sys
 app = Flask(__name__)
 
 COLORS = [
-    '\033[31m',  # Red
-    '\033[34m',  # Blue
-    '\033[32m',  # Green
-    '\033[33m',  # Yellow
-    '\033[31m',  # White
-    '\033[34m',
-    '\033[31m'
+    '\033[38;5;183m',
 ]
 
 COLOR_RESET = '\033[0m'
@@ -33,8 +27,9 @@ def clear_screen():
 def load_frames(frames_dir):
     frames = []
     try:
-        for i in range(10):
-            with open(os.path.join(frames_dir, f"{i}.txt"), 'r', encoding='utf-8') as f:
+        for i in range(27):
+            print(i)
+            with open(os.path.join(frames_dir, f"ascii-art({i}).txt"), 'r', encoding='utf-8') as f:
                 frames.append(f.read())
     except Exception as e:
         print(f"Error loading frames: {e}")
