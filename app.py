@@ -64,7 +64,7 @@ def generate_frames(frames):
                    colored_frame + '\n' +
                    RESTORE_CURSOR)
 
-            time.sleep(0.1)
+            time.sleep(0.05)
 
             frame_count += 1
             color_index += 1
